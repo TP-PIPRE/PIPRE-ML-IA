@@ -1,47 +1,75 @@
-import pandas as pd
-from sklearn.preprocessing import LabelEncoder
+def preprocess_data(self, df, is_training=False):
+    df = df.copy()
 
-EXPECTED_COLUMNS = [
-    "id_estudiante", "edad", "grado", "tiempo_sesion_min",
-    "intentos", "errores", "puntaje", "actividades_completadas",
-    "tasa_exito", "dias_inactivo", "nivel_logico",
-    "uso_bloques", "uso_codigo", "interacciones_ia",
-    "ayuda_solicitada", "emocion_detectada",
-    "riesgo_abandono", "rendimiento",
-]
+    # 🔧 columnas base
+    base_cols = [
+        "nivel_logico",
+        "dias_inactivo",
+        "uso_codigo",
+        "interacciones_ia",
+        "intentos"
+    ]
 
-def preprocess(df, encoders=None, is_training=True):
+    for col in base_cols:
+        if col not in df.columns:
+            df[col] = 0
 
-    # Validar columnas
-    missing = set(EXPECTED_COLUMNS) - set(df.columns)
-    if missing:
-        raise ValueError(f"Faltan columnas: {missing}")
+    # 🔧 asegurar tipo numérico
+    numeric_cols = [
+        "dias_inactivo", "uso_codigo",
+        "interacciones_ia", "intentos"
+    ]
 
-    df = df[EXPECTED_COLUMNS]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    # Eliminar nulos
-    df = df.dropna()
+    # 🎯 SOLO entrenamiento
+    if is_training:
+        required_cols = ["puntaje", "tasa_exito", "errores", "intentos"]
 
-    categorical_cols = ["nivel_logico", "emocion_detectada", "rendimiento"]
+        for col in required_cols:
+            if col not in df.columns:
+                raise ValueError(f"Falta columna: {col}")
+
+        for col in required_cols:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+        df["score_final"] = (
+            df["puntaje"] * 0.5 +
+            df["tasa_exito"] * 50 -
+            df["errores"] * 2 +
+            df["intentos"] * 1.5
+        )
+
+        df["rendimiento"] = pd.qcut(
+            df["score_final"],
+            q=3,
+            labels=["bajo", "medio", "alto"],
+            duplicates="drop"
+        )
+
+        # 🔥 evitar NaN en target
+        df["rendimiento"] = df["rendimiento"].astype(str).fillna("medio")
+
+    # 🔥 FEATURES ROBUSTAS
+    df["ratio_ia"] = df["interacciones_ia"] / (df["intentos"] + 1)
+    df["actividad_total"] = df["uso_codigo"] + df["interacciones_ia"]
+    df["inactividad_relativa"] = df["dias_inactivo"] / (df["dias_inactivo"] + df["intentos"] + 1)
+
+    # 🔧 limpiar posibles inf / NaN
+    df.replace([float("inf"), -float("inf")], 0, inplace=True)
+    df.fillna(0, inplace=True)
+
+    # 🔧 encoding
+    df["nivel_logico"] = df["nivel_logico"].astype(str)
 
     if is_training:
-        encoders = {}
-
-        for col in categorical_cols:
-            le = LabelEncoder()
-            df[col] = le.fit_transform(df[col])
-            encoders[col] = le
-
+        df["nivel_logico"] = self.le_nivel.fit_transform(df["nivel_logico"])
+        df["rendimiento"] = self.le_target.fit_transform(df["rendimiento"])
     else:
-        for col in categorical_cols:
-            le = encoders[col]
+        df["nivel_logico"] = df["nivel_logico"].apply(
+            lambda x: x if x in self.le_nivel.classes_ else self.le_nivel.classes_[0]
+        )
+        df["nivel_logico"] = self.le_nivel.transform(df["nivel_logico"])
 
-            def safe_transform(val):
-                if val in le.classes_:
-                    return le.transform([val])[0]
-                else:
-                    return 0  # valor por defecto
-
-            df[col] = df[col].apply(safe_transform)
-
-    return df, encoders
+    return df

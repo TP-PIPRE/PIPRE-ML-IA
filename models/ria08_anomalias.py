@@ -6,7 +6,6 @@ class DetectorAnomalias:
     def __init__(self):
         self.model = IsolationForest(contamination=0.1, random_state=42)
 
-        # 🔥 Definir columnas base (clave)
         self.feature_columns = [
             "tiempo_sesion_min",
             "intentos",
@@ -15,9 +14,21 @@ class DetectorAnomalias:
             "dias_inactivo"
         ]
 
+        self.anomaly_ratio = 0
+
+    def preprocess(self, df):
+        df = df.copy()
+
+        for col in self.feature_columns:
+            if col not in df.columns:
+                df[col] = 0
+
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+        return df[self.feature_columns]
+
     def train(self, df):
-        # 🔥 Seleccionar SOLO columnas necesarias
-        X = df[self.feature_columns]
+        X = self.preprocess(df)
 
         self.model.fit(X)
 
@@ -25,16 +36,8 @@ class DetectorAnomalias:
         self.anomaly_ratio = (preds == -1).mean()
 
     def predict(self, data):
-
-        # 🔥 Asegurar columnas correctas
-        for col in self.feature_columns:
-            if col not in data.columns:
-                data[col] = 0
-
-        X = data[self.feature_columns]
+        X = self.preprocess(data)
 
         result = self.model.predict(X)[0]
 
-        if result == -1:
-            return "Anomalía detectada"
-        return "Comportamiento normal"
+        return "Anomalía detectada" if result == -1 else "Comportamiento normal"

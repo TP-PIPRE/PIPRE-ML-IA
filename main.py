@@ -1,104 +1,93 @@
 import pandas as pd
 
 from utils.loader import load_data
-from utils.preprocess import preprocess  # 🔥 IMPORTANTE
 
 from models.ria01_desempeño import ClasificadorDesempeno
 from models.ria03_recomendador import RecomendadorActividades
 from models.ria08_anomalias import DetectorAnomalias
-from models.ria11_tiempo import PrediccionTiempo
+from models.ria11_tiempo import ClasificadorTiempo
 from models.ria12_codigo import EvaluadorCodigo
 
 
 def main():
     # =========================
-    # 🔥 CARGA Y PREPROCESS
+    # CARGA Y PREPROCESS GLOBAL
     # =========================
     df = load_data("data/dataset.xlsx")
-    df, encoders = preprocess(df, is_training=True)
 
     print("✅ Datos preprocesados\n")
 
     # =========================
-    # 🔹 RIA-01 DESEMPEÑO
+    # INPUT BASE (CRUDO)
+    # =========================
+    input_data = pd.DataFrame([{
+        "tiempo_sesion_min": 30,
+        "intentos": 3,
+        "errores": 1,
+        "nivel_logico": "medio",
+        "uso_codigo": 40,
+        "interacciones_ia": 2,
+        "puntaje": 75,
+        "dias_inactivo": 1
+    }])
+
+    # =========================
+    # RIA-01 DESEMPEÑO
     # =========================
     ria01 = ClasificadorDesempeno()
     ria01.train(df)
 
-    ria01_input = pd.DataFrame([{
-        "id_estudiante": 1,
-        "edad": 10,
-        "grado": 5,
-        "tiempo_sesion_min": 30,
-        "intentos": 3,
-        "errores": 1,
-        "puntaje": 80,
-        "actividades_completadas": 5,
-        "tasa_exito": 0.8,
-        "dias_inactivo": 1,
-        "nivel_logico": "medio",
-        "uso_bloques": 1,
-        "uso_codigo": 40,
-        "interacciones_ia": 2,
-        "ayuda_solicitada": 1,
-        "emocion_detectada": "feliz",
-        "riesgo_abandono": 0,
-        "rendimiento": "medio",
-        "complejidad_actividad": 10,
-        "tasa_exito_ajustada_intentos": 0.25,
-        "frecuencia_interaccion_ia_error": 0.3,
-        "dias_activos_recientes": 3
-    }])
-
-    ria01_input, _ = preprocess(ria01_input, encoders=encoders, is_training=False)
+    ria01_input = ria01.preprocess_data(input_data.copy(), is_training=False)
 
     print("RIA-01 Nivel:", ria01.predict(ria01_input))
     print(f"Accuracy: {ria01.accuracy:.2f}")
     print(f"Precision: {ria01.precision:.2f}\n")
 
     # =========================
-    # 🔹 RIA-03 RECOMENDADOR
+    # RIA-03 RECOMENDADOR (🔥 RANDOMIZED)
     # =========================
     rec = RecomendadorActividades()
     rec.train(df)
+    rec.evaluar(df)
 
-    rec_input = ria01_input.copy()  # 🔥 reutilizas input ya limpio
+    rec_input = df.mean(numeric_only=True).to_frame().T
+    rec_input["nivel_logico"] = df["nivel_logico"].mode()[0]
 
     print("RIA-03:", rec.predict(rec_input))
     print(f"Accuracy: {rec.accuracy:.2f}")
     print(f"Precision: {rec.precision:.2f}\n")
 
     # =========================
-    # 🔹 RIA-08 ANOMALÍAS
+    # RIA-08 ANOMALÍAS
     # =========================
-    anom = DetectorAnomalias()
-    anom.train(df)
+    det = DetectorAnomalias()
 
-    anom_input = ria01_input.copy()
+    det.train(df)
 
-    print("RIA-08:", anom.predict(anom_input))
-    print(f"Tasa de anomalías: {anom.anomaly_ratio:.2f}\n")
+    ejemplo = df.sample(1, random_state=42)
 
+    print("RIA-08:", det.predict(ejemplo))
+    print(f"Tasa de anomalías: {det.anomaly_ratio:.2f}")
+    
     # =========================
-    # 🔹 RIA-11 TIEMPO
+    # RIA-11 TIEMPO (rápido/normal/lento)
     # =========================
-    tiempo = PrediccionTiempo()
+    tiempo = ClasificadorTiempo()
     tiempo.train(df)
 
-    tiempo_input = ria01_input.copy()
+    tiempo_input = tiempo.preprocess(input_data.copy(), is_training=False)
 
-    print("RIA-11 Tiempo estimado:", tiempo.predict(tiempo_input))
-    print(f"R2 Score: {tiempo.r2:.2f}")
-    print(f"MAE: {tiempo.mae:.2f}")
-    print(f"Exactitud (±5 min): {tiempo.accuracy:.2f}\n")
+    print("RIA-11 Tiempo:", tiempo.predict(tiempo_input))
+  
 
-    # =========================
-    # 🔹 RIA-12 CÓDIGO
+   # =========================
+    # RIA-12 CÓDIGO
     # =========================
     codigo = EvaluadorCodigo()
     codigo.train(df)
 
-    codigo_input = ria01_input.copy()
+    # 🔥 AHORA SÍ usar preprocess_data
+    codigo_input = codigo.preprocess_data(input_data.copy(), is_training=False)
 
     print("RIA-12:", codigo.predict(codigo_input))
     print(f"Accuracy: {codigo.accuracy:.2f}")
