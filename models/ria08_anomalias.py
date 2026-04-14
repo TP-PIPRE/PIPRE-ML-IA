@@ -34,10 +34,25 @@ class DetectorAnomalias:
 
         preds = self.model.predict(X)
         self.anomaly_ratio = (preds == -1).mean()
-
+    
     def predict(self, data):
         X = self.preprocess(data)
 
         result = self.model.predict(X)[0]
 
         return "Anomalía detectada" if result == -1 else "Comportamiento normal"
+    
+    
+    def calcular_importancia(self, df):
+        X = self.preprocess(df)
+
+        # 🔥 usar desviación estándar como proxy de importancia
+        importancias = X.std().to_dict()
+
+        # 🔥 normalizar
+        total = sum(importancias.values())
+        if total > 0:
+            importancias = {k: v / total for k, v in importancias.items()}
+
+        return importancias
+        
