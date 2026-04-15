@@ -176,8 +176,16 @@ class AppResultados:
     # =========================
     def ejecutar_evaluacion(self):
         nuevos_resultados = self.evaluar_otro()
-        self.root.destroy()
-        mostrar_resultados(nuevos_resultados, self.evaluar_otro)
+
+        # 🔥 limpiar la interfaz actual
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # 🔥 actualizar datos
+        self.resultados = nuevos_resultados
+
+        # 🔥 reconstruir UI
+        self.crear_interfaz()
 
     # =========================
     # 📈 GRÁFICO
@@ -214,7 +222,7 @@ class AppResultados:
         canvas.draw()
         canvas.get_tk_widget().pack(pady=10)
 
-
+        plt.close(fig)
 # =========================
 # 🚀 LAUNCHER
 # =========================
